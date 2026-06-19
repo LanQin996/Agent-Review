@@ -1,0 +1,31 @@
+{
+  "name": "ai-pr-reviewer",
+  "version": "0.1.0",
+  "description": "Custom OpenAI-powered GitHub PR reviewer that posts inline review comments and suggestions.",
+  "type": "module",
+  "bin": {
+    "ai-pr-reviewer": "./bin/ai-pr-reviewer.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "review:pr": "node ./bin/ai-pr-reviewer.js",
+    "test": "node --test",
+    "check": "node ./scripts/check-syntax.mjs"
+  },
+  "keywords": [
+    "github",
+    "pull-request",
+    "code-review",
+    "openai",
+    "codex"
+  ],
+  "license": "MIT"
+}
