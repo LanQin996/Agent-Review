@@ -1,7 +1,8 @@
 import { normalizeSeverity } from './severity.js';
 import { buildFindingMarker } from './dedupe.js';
 
-const REVIEW_MARKER = '<!-- ai-pr-reviewer -->';
+export const REVIEW_MARKER = '<!-- ai-pr-reviewer -->';
+export const SUMMARY_MARKER = '<!-- ai-pr-reviewer:summary -->';
 
 export function buildReviewBody({ review, validFindings, skippedFindings, commitId, model, reviewEvent, policyText }) {
   const counts = countBySeverity(validFindings);
@@ -19,6 +20,7 @@ export function buildReviewBody({ review, validFindings, skippedFindings, commit
     : '';
 
   return `${REVIEW_MARKER}
+${SUMMARY_MARKER}
 ## 🤖 AI PR Review
 
 ${review.summary}
@@ -50,6 +52,22 @@ export function buildCommentBody(finding) {
 
   parts.push('', 'Useful? React with 👍 / 👎.');
   return parts.join('\n');
+}
+
+export function normalizeSummaryMode(value) {
+  const mode = String(value || 'review').trim().toLowerCase();
+  if (['review', 'comment', 'both', 'none'].includes(mode)) return mode;
+  return 'review';
+}
+
+export function shouldCreateReviewSummary(mode) {
+  const normalized = normalizeSummaryMode(mode);
+  return normalized === 'review' || normalized === 'both';
+}
+
+export function shouldUpsertIssueSummary(mode) {
+  const normalized = normalizeSummaryMode(mode);
+  return normalized === 'comment' || normalized === 'both';
 }
 
 export function toGitHubReviewComments(findings) {

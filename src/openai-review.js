@@ -1,4 +1,5 @@
 import { BUILTIN_REVIEW_POLICY } from './review-policy.js';
+import { requestJsonWithRetry } from './http.js';
 
 const REVIEW_SCHEMA = {
   type: 'object',
@@ -58,16 +59,30 @@ const REVIEW_SCHEMA = {
 };
 
 export class OpenAIReviewClient {
-  constructor({ apiKey, baseUrl = 'https://api.openai.com/v1', model = 'gpt-5.5' }) {
+  constructor({
+    apiKey,
+    baseUrl = 'https://api.openai.com/v1',
+    model = 'gpt-5.5',
+    apiMode = 'responses',
+    timeoutMs = 120_000,
+    retries = 2,
+  }) {
     if (!apiKey) throw new Error('OPENAI_API_KEY is required');
     this.apiKey = apiKey;
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
+    this.apiMode = normalizeApiMode(apiMode);
+    this.timeoutMs = timeoutMs;
+    this.retries = retries;
   }
 
   async review({ repo, pr, rulesText, diffText }) {
     const system = buildSystemPrompt();
     const user = buildUserPrompt({ repo, pr, rulesText, diffText });
+
+    if (this.apiMode === 'chat') {
+      return this.reviewWithChatCompletions({ system, user });
+    }
 
     const payload = {
       model: this.model,
@@ -102,23 +117,42 @@ export class OpenAIReviewClient {
     return normalizeReview(parsed);
   }
 
-  async request(path, payload) {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+  async reviewWithChatCompletions({ system, user }) {
+    const payload = {
+      model: this.model,
+      messages: [
+        { role: 'system', content: `${system}\n\n${CHAT_JSON_INSTRUCTIONS}\n\n你必须只输出一个 JSON 对象，不要使用 markdown 代码围栏。` },
+        { role: 'user', content: user },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0,
+    };
 
-    const text = await response.text();
-    const data = text ? safeJson(text) : null;
-    if (!response.ok) {
-      const message = data?.error?.message || data?.message || text || response.statusText;
-      throw new Error(`OpenAI API ${response.status} ${response.statusText}: ${message}`);
+    const response = await this.request('/chat/completions', payload);
+    const text = response?.choices?.[0]?.message?.content || '';
+    if (!text) {
+      throw new Error('OpenAI chat completion did not contain message content');
     }
-    return data;
+    return normalizeReview(parseJsonObject(text));
+  }
+
+  async request(path, payload) {
+    try {
+      return await requestJsonWithRetry(`${this.baseUrl}${path}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      }, {
+        timeoutMs: this.timeoutMs,
+        retries: this.retries,
+        retryUnsafe: true,
+      });
+    } catch (error) {
+      throw new Error(`OpenAI API request failed: ${error.message}`);
+    }
   }
 }
 
@@ -164,6 +198,23 @@ ${rulesText}
 ${diffText}`;
 }
 
+const CHAT_JSON_INSTRUCTIONS = `chat/completions 兼容模式输出结构：
+{
+  "summary": "中文摘要",
+  "findings": [
+    {
+      "severity": "P0|P1|P2|P3",
+      "path": "diff 中的文件路径",
+      "line": 123,
+      "start_line": null,
+      "side": "RIGHT|LEFT",
+      "title": "简短标题",
+      "body": "中文说明",
+      "suggestion": "可选替换代码；没有则为空字符串"
+    }
+  ]
+}`;
+
 function extractResponseText(response) {
   if (typeof response.output_text === 'string') return response.output_text;
 
@@ -207,12 +258,10 @@ function normalizeFinding(finding) {
   };
 }
 
-function safeJson(text) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
+function normalizeApiMode(value) {
+  const mode = String(value || 'responses').trim().toLowerCase();
+  if (['chat', 'chat_completions', 'chat-completions'].includes(mode)) return 'chat';
+  return 'responses';
 }
 
 

@@ -9,7 +9,14 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     maxPatchBytes: parseInteger(env.MAX_PATCH_BYTES, 180_000),
     maxComments: parseInteger(env.MAX_COMMENTS, 30),
     model: env.OPENAI_MODEL || 'gpt-5.5',
+    openaiApiMode: env.OPENAI_API_MODE || 'responses',
+    openaiTimeoutMs: parseInteger(env.OPENAI_TIMEOUT_MS, 120_000),
+    openaiRetries: parseNonNegativeInteger(env.OPENAI_RETRIES, 2),
+    githubTimeoutMs: parseInteger(env.GITHUB_TIMEOUT_MS, 30_000),
+    githubRetries: parseNonNegativeInteger(env.GITHUB_RETRIES, 2),
     rules: env.REVIEW_RULES || '.github/ai-review.md,AGENTS.md',
+    ignore: env.REVIEW_IGNORE || '.ai-reviewignore',
+    summaryMode: env.SUMMARY_MODE || 'review',
     reviewEvent: env.REVIEW_EVENT || 'AUTO',
     requestChangesOn: env.REQUEST_CHANGES_ON || 'P1',
     approveWhenClean: parseBoolean(env.APPROVE_WHEN_CLEAN, false),
@@ -64,6 +71,7 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
 
   args.prNumber = args.prNumber ? Number(args.prNumber) : 0;
   args.ruleFiles = splitCsv(args.rules);
+  args.ignoreFiles = splitCsv(args.ignore);
   return args;
 }
 
@@ -86,8 +94,25 @@ function setOption(args, key, value) {
     case 'model':
       args.model = value;
       break;
+    case 'openaiApiMode':
+      args.openaiApiMode = value;
+      break;
+    case 'openaiTimeoutMs':
+    case 'githubTimeoutMs':
+      args[normalized] = parseInteger(value, args[normalized]);
+      break;
+    case 'openaiRetries':
+    case 'githubRetries':
+      args[normalized] = parseNonNegativeInteger(value, args[normalized]);
+      break;
     case 'rules':
       args.rules = value;
+      break;
+    case 'ignore':
+      args.ignore = value;
+      break;
+    case 'summaryMode':
+      args.summaryMode = value;
       break;
     case 'maxFiles':
     case 'maxPatchBytes':
@@ -123,6 +148,11 @@ function setOption(args, key, value) {
 function parseBoolean(value, fallback) {
   if (value == null || value === '') return fallback;
   return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+}
+
+function parseNonNegativeInteger(value, fallback) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 function parseInteger(value, fallback) {
@@ -172,8 +202,15 @@ Options:
   --repo owner/name              GitHub repository. Defaults to GITHUB_REPOSITORY.
   --pr 123                       Pull request number. Defaults to PR_NUMBER or event payload.
   --model model                  OpenAI model. Defaults to OPENAI_MODEL or gpt-5.5.
+  --openai-api-mode responses    responses or chat. Defaults to OPENAI_API_MODE or responses.
+  --openai-timeout-ms 120000     OpenAI request timeout.
+  --openai-retries 2             OpenAI retry count for transient failures.
   --openai-base-url url          OpenAI-compatible API base URL. Defaults to OPENAI_BASE_URL or https://api.openai.com/v1.
   --rules file1,file2            Rule files. Defaults to .github/ai-review.md,AGENTS.md.
+  --ignore file1,file2           Ignore files. Defaults to .ai-reviewignore.
+  --summary-mode review          review, comment, both, or none.
+  --github-timeout-ms 30000      GitHub API request timeout.
+  --github-retries 2             GitHub API retry count for safe requests.
   --max-files n                  Maximum changed files to include.
   --max-patch-bytes n            Maximum combined patch bytes sent to model.
   --max-comments n               Maximum inline comments to post.

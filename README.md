@@ -22,13 +22,22 @@ OPENAI_API_KEY=sk-...
 
 ```text
 OPENAI_MODEL=gpt-5.5
+OPENAI_API_MODE=chat
 OPENAI_BASE_URL=https://api.example.com/v1
 ```
 
-如果你不是用官方 OpenAI，而是第三方 / 自建 OpenAI-compatible 服务，重点配置 `OPENAI_BASE_URL`。工具会请求：
+如果你不是用官方 OpenAI，而是第三方 / 自建 OpenAI-compatible 服务，重点配置：
 
 ```text
-${OPENAI_BASE_URL}/responses
+OPENAI_API_MODE=chat
+OPENAI_BASE_URL=https://api.example.com/v1
+```
+
+API mode：
+
+```text
+responses -> ${OPENAI_BASE_URL}/responses
+chat      -> ${OPENAI_BASE_URL}/chat/completions
 ```
 
 所以 base URL 通常需要带 `/v1`，例如 `https://api.example.com/v1`。
@@ -66,6 +75,7 @@ npx ai-pr-reviewer --post
 ```bash
 GITHUB_TOKEN=ghp_xxx \
 OPENAI_API_KEY=sk_xxx \
+OPENAI_API_MODE=chat \
 OPENAI_BASE_URL=https://api.example.com/v1 \
 GITHUB_REPOSITORY=owner/repo \
 PR_NUMBER=123 \
@@ -77,6 +87,7 @@ Windows PowerShell：
 ```powershell
 $env:GITHUB_TOKEN="ghp_xxx"
 $env:OPENAI_API_KEY="sk_xxx"
+$env:OPENAI_API_MODE="chat"
 $env:OPENAI_BASE_URL="https://api.example.com/v1"
 $env:GITHUB_REPOSITORY="owner/repo"
 $env:PR_NUMBER="123"
@@ -104,13 +115,43 @@ REVIEW_RULES=.github/ai-review.md,docs/review-policy.md node ./bin/ai-pr-reviewe
 node ./bin/ai-pr-reviewer.js --post --rules .github/ai-review.md,docs/review-policy.md
 ```
 
+
+## 忽略文件
+
+默认读取 `.ai-reviewignore`，并内置跳过常见低价值文件：
+
+```text
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+dist/**
+build/**
+coverage/**
+generated/**
+**/*.min.js
+**/*.map
+**/*.snap
+```
+
+你可以通过环境变量或参数指定更多 ignore 文件：
+
+```bash
+REVIEW_IGNORE=.ai-reviewignore,docs/review-ignore.txt node ./bin/ai-pr-reviewer.js --post
+```
+
+忽略的文件不会发送给模型，可节省 token 并减少锁文件/构建产物带来的噪音。
+
 ## 常用配置
 
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
 | `OPENAI_MODEL` | `gpt-5.5` | OpenAI 模型 |
+| `OPENAI_API_MODE` | `responses` | `responses` 或 `chat`；第三方兼容服务常用 `chat` |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | 兼容 OpenAI API 的 base URL，通常需要带 `/v1` |
+| `OPENAI_TIMEOUT_MS` | `120000` | OpenAI 请求超时 |
+| `OPENAI_RETRIES` | `2` | OpenAI 临时失败重试次数 |
 | `REVIEW_RULES` | `.github/ai-review.md,AGENTS.md` | 审查规则文件 |
+| `REVIEW_IGNORE` | `.ai-reviewignore` | 忽略规则文件 |
 | `REVIEW_SEVERITY_THRESHOLD` | `P3` | 最低发布级别 |
 | `REVIEW_EVENT` | `AUTO` | `AUTO` / `COMMENT` / `REQUEST_CHANGES` / `APPROVE` |
 | `REQUEST_CHANGES_ON` | `P1` | `AUTO` 模式下，出现该级别及以上问题时 Request changes |
@@ -119,6 +160,9 @@ node ./bin/ai-pr-reviewer.js --post --rules .github/ai-review.md,docs/review-pol
 | `MAX_FILES` | `80` | 最多送审文件数 |
 | `MAX_PATCH_BYTES` | `180000` | 最多送审 diff 字节数 |
 | `MAX_COMMENTS` | `30` | 最多 inline 评论数 |
+| `SUMMARY_MODE` | `review` | `review` / `comment` / `both` / `none` |
+| `GITHUB_TIMEOUT_MS` | `30000` | GitHub API 请求超时 |
+| `GITHUB_RETRIES` | `2` | GitHub API 安全请求重试次数 |
 
 ## GitHub 评论效果
 
@@ -174,6 +218,26 @@ APPROVE_WHEN_CLEAN: 'true'
 你还可以在 `.github/ai-review.md` 里叠加仓库自己的审查规则。
 
 
+## Summary 发布模式
+
+`SUMMARY_MODE` 控制总览信息发布位置：
+
+```text
+review  -> 每次创建 GitHub Review summary，默认值
+comment -> 更新同一条 PR 普通评论，避免多次 push 后 summary 刷屏
+both    -> review summary + upsert 普通评论
+none    -> 不发 summary，只发 inline comments / 必要的 request changes
+```
+
+如果你希望追加 commit 后 PR 页面更干净，推荐：
+
+```yaml
+SUMMARY_MODE: comment
+```
+
+`comment` / `both` 模式会用隐藏标记 `<!-- ai-pr-reviewer:summary -->` 找到并更新上一条 summary 评论。
+
+
 ## 多 commit / 追加提交行为
 
 workflow 监听了：
@@ -212,8 +276,9 @@ concurrency:
 GitHub Action
   -> ai-pr-reviewer CLI
   -> GitHub API 获取 PR diff
+  -> 应用 .ai-reviewignore / 内置 ignore 规则
   -> 读取 .github/ai-review.md / AGENTS.md
-  -> OpenAI Responses API 输出结构化 JSON
+  -> OpenAI Responses API 或 Chat Completions 输出结构化 JSON
   -> 校验 path + line 是否属于 diff
   -> GitHub Review API 发 summary + inline comments
 ```
@@ -239,8 +304,15 @@ ai-pr-reviewer --dry-run --repo owner/name --pr 123
 --repo owner/name              仓库，默认 GITHUB_REPOSITORY
 --pr 123                       PR 编号，默认 PR_NUMBER
 --model model                  模型，默认 OPENAI_MODEL 或 gpt-5.5
+--openai-api-mode responses    responses 或 chat
+--openai-timeout-ms 120000     OpenAI 请求超时
+--openai-retries 2             OpenAI 重试次数
 --openai-base-url url          OpenAI-compatible API base URL
 --rules file1,file2            规则文件
+--ignore file1,file2           ignore 文件，默认 .ai-reviewignore
+--summary-mode review          review/comment/both/none
+--github-timeout-ms 30000      GitHub API 请求超时
+--github-retries 2             GitHub API 重试次数
 --max-files n                  最多审查文件数
 --max-patch-bytes n            最多 diff 字节数
 --max-comments n               最多 inline comments

@@ -1,0 +1,14 @@
+# Lockfiles
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+
+# Generated / bundled output
+dist/**
+build/**
+coverage/**
+generated/**
+**/*.min.js
+**/*.map
+**/*.snap

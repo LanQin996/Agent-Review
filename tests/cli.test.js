@@ -35,3 +35,26 @@ test('parseArgs supports approval policy options', () => {
   assert.equal(args.requestChangesOn, 'P2');
   assert.equal(args.approveWhenClean, true);
 });
+
+
+test('parseArgs supports API mode, retry, ignore, and summary options', () => {
+  const args = parseArgs([
+    '--repo', 'owner/name',
+    '--pr', '8',
+    '--openai-api-mode', 'chat',
+    '--openai-timeout-ms', '1000',
+    '--openai-retries', '0',
+    '--github-timeout-ms', '2000',
+    '--github-retries', '1',
+    '--ignore', '.ai-reviewignore,extra.ignore',
+    '--summary-mode', 'comment',
+  ], {});
+
+  assert.equal(args.openaiApiMode, 'chat');
+  assert.equal(args.openaiTimeoutMs, 1000);
+  assert.equal(args.openaiRetries, 0);
+  assert.equal(args.githubTimeoutMs, 2000);
+  assert.equal(args.githubRetries, 1);
+  assert.deepEqual(args.ignoreFiles, ['.ai-reviewignore', 'extra.ignore']);
+  assert.equal(args.summaryMode, 'comment');
+});
