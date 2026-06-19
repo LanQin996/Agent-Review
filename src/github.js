@@ -22,6 +22,16 @@ export class GitHubClient {
     return files;
   }
 
+  async listReviewComments(prNumber) {
+    const comments = [];
+    for (let page = 1; page <= 20; page += 1) {
+      const batch = await this.request(`/repos/${this.owner}/${this.repo}/pulls/${prNumber}/comments?per_page=100&page=${page}`);
+      comments.push(...batch);
+      if (batch.length < 100) break;
+    }
+    return comments;
+  }
+
   async createReview(prNumber, payload) {
     return this.request(`/repos/${this.owner}/${this.repo}/pulls/${prNumber}/reviews`, {
       method: 'POST',

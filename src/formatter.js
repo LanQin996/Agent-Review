@@ -1,4 +1,5 @@
 import { normalizeSeverity } from './severity.js';
+import { buildFindingMarker } from './dedupe.js';
 
 const REVIEW_MARKER = '<!-- ai-pr-reviewer -->';
 
@@ -11,7 +12,7 @@ export function buildReviewBody({ review, validFindings, skippedFindings, commit
     .join(', ') || '0';
 
   const skippedText = skippedFindings?.length
-    ? `\n\n<details>\n<summary>已跳过 ${skippedFindings.length} 条无法定位到 diff 行的模型输出</summary>\n\n${skippedFindings
+    ? `\n\n<details>\n<summary>已跳过/未重复发布 ${skippedFindings.length} 条模型输出</summary>\n\n${skippedFindings
         .slice(0, 10)
         .map((item) => `- ${item.finding?.path || 'unknown'}:${item.finding?.line || '?'} — ${item.reason}`)
         .join('\n')}\n\n</details>`
@@ -37,6 +38,7 @@ export function buildCommentBody(finding) {
   const suggestion = String(finding.suggestion || '').trim();
 
   const parts = [
+    buildFindingMarker(finding),
     `${badge(severity)} **${escapeMarkdown(title)}**`,
     '',
     body,

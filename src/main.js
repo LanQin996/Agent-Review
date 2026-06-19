@@ -6,6 +6,7 @@ import { serializeChangedFilesForPrompt, buildFileIndex, validateFindingLocation
 import { loadRuleFiles, formatRulesForPrompt } from './rules.js';
 import { buildReviewBody, toGitHubReviewComments } from './formatter.js';
 import { resolveReviewEvent, resolveNoDiffReviewEvent, describeReviewPolicy } from './approval.js';
+import { extractFindingFingerprintsFromComments, filterDuplicateFindings } from './dedupe.js';
 import { isAtOrAboveSeverity, normalizeSeverity, sortBySeverityThenPath } from './severity.js';
 
 export async function main(argv = process.argv.slice(2), env = process.env) {
@@ -75,7 +76,11 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   });
 
   const { validFindings, skippedFindings } = prepareFindings(review.findings, reviewableFiles, args);
-  const comments = toGitHubReviewComments(validFindings);
+  const existingComments = args.dryRun ? [] : await github.listReviewComments(args.prNumber);
+  const existingFingerprints = extractFindingFingerprintsFromComments(existingComments);
+  const { fresh: freshFindings, duplicates: duplicateFindings } = filterDuplicateFindings(validFindings, existingFingerprints);
+  const skippedWithDuplicates = [...skippedFindings, ...duplicateFindings];
+  const comments = toGitHubReviewComments(freshFindings);
   const reviewEvent = resolveReviewEvent({
     configuredEvent: args.reviewEvent,
     validFindings,
@@ -87,7 +92,7 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     requestChangesOn: args.requestChangesOn,
     approveWhenClean: args.approveWhenClean,
   });
-  const body = buildReviewBody({ review, validFindings, skippedFindings, commitId, model: args.model, reviewEvent, policyText });
+  const body = buildReviewBody({ review, validFindings: freshFindings, skippedFindings: skippedWithDuplicates, commitId, model: args.model, reviewEvent, policyText });
 
   if (args.dryRun) {
     console.log(JSON.stringify({
@@ -99,7 +104,8 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
       review_event: reviewEvent,
       comments,
       raw_review: review,
-      skipped_findings: skippedFindings,
+      duplicate_findings: duplicateFindings,
+      skipped_findings: skippedWithDuplicates,
     }, null, 2));
   } else {
     console.error(`[ai-pr-reviewer] Posting review with ${comments.length} inline comments...`);

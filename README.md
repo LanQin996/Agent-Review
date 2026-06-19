@@ -173,6 +173,37 @@ APPROVE_WHEN_CLEAN: 'true'
 
 你还可以在 `.github/ai-review.md` 里叠加仓库自己的审查规则。
 
+
+## 多 commit / 追加提交行为
+
+workflow 监听了：
+
+```yaml
+pull_request:
+  types: [opened, synchronize, reopened]
+```
+
+所以一个 PR 有多个 commit 时，每次新增 commit / force push 都会重新审查 **当前 PR head 相对 base 的完整 diff**，不是只审最后一个 commit。
+
+为避免追加 commit 后重复刷相同评论，工具现在会：
+
+1. 读取当前 PR 已有 review comments。
+2. 查找隐藏 marker：`<!-- ai-pr-reviewer:finding ... -->`。
+3. 对新的 finding 生成稳定 fingerprint。
+4. 已经发过的 finding 不重复发布，只在 summary 的折叠区标记为跳过。
+
+workflow 也加了 concurrency：
+
+```yaml
+concurrency:
+  group: ai-pr-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+```
+
+这样连续 push 多个 commit 时，会取消同一 PR 上正在跑的旧审查，尽量只保留最新一次。
+
+注意：如果同一问题因为代码移动导致行号变化，fingerprint 可能变化，仍可能重新评论；这是为了避免错过被移动到新位置后仍存在的问题。
+
 ## 设计说明
 
 执行流程：
