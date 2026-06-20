@@ -12,6 +12,7 @@ test('parseArgs supports --key=value and env defaults', () => {
   assert.equal(args.repo, 'name');
   assert.equal(args.prNumber, 42);
   assert.equal(args.model, 'gpt-test');
+  assert.equal(args.openaiStream, true);
   assert.equal(args.dryRun, true);
 });
 
@@ -42,6 +43,7 @@ test('parseArgs supports API mode, retry, ignore, and summary options', () => {
     '--repo', 'owner/name',
     '--pr', '8',
     '--openai-api-mode', 'chat',
+    '--openai-stream', 'true',
     '--reasoning-effort', 'xhigh',
     '--reasoning-summary', 'auto',
     '--openai-timeout-ms', '1000',
@@ -53,6 +55,7 @@ test('parseArgs supports API mode, retry, ignore, and summary options', () => {
   ], {});
 
   assert.equal(args.openaiApiMode, 'chat');
+  assert.equal(args.openaiStream, true);
   assert.equal(args.reasoningEffort, 'xhigh');
   assert.equal(args.reasoningSummary, 'auto');
   assert.equal(args.openaiTimeoutMs, 1000);
@@ -61,4 +64,20 @@ test('parseArgs supports API mode, retry, ignore, and summary options', () => {
   assert.equal(args.githubRetries, 1);
   assert.deepEqual(args.ignoreFiles, ['.ai-reviewignore', 'extra.ignore']);
   assert.equal(args.summaryMode, 'comment');
+});
+
+test('parseArgs enables stream by default and supports disabling it', () => {
+  const enabled = parseArgs(['--repo', 'owner/name', '--pr', '9'], {
+  });
+  assert.equal(enabled.openaiStream, true);
+
+  const disabledByEnv = parseArgs(['--repo', 'owner/name', '--pr', '9'], {
+    OPENAI_STREAM: 'false',
+  });
+  assert.equal(disabledByEnv.openaiStream, false);
+
+  const disabled = parseArgs(['--repo', 'owner/name', '--pr', '9', '--no-openai-stream'], {
+    OPENAI_STREAM: 'true',
+  });
+  assert.equal(disabled.openaiStream, false);
 });

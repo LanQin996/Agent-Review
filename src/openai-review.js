@@ -64,6 +64,7 @@ export class OpenAIReviewClient {
     baseUrl = 'https://api.openai.com/v1',
     model = 'gpt-5.5',
     apiMode = 'responses',
+    stream = true,
     reasoningEffort = '',
     reasoningSummary = '',
     timeoutMs = 120_000,
@@ -74,6 +75,7 @@ export class OpenAIReviewClient {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
     this.apiMode = normalizeApiMode(apiMode);
+    this.stream = Boolean(stream);
     this.reasoningEffort = normalizeReasoningEffort(reasoningEffort);
     this.reasoningSummary = normalizeReasoningSummary(reasoningSummary);
     this.timeoutMs = timeoutMs;
@@ -117,8 +119,9 @@ export class OpenAIReviewClient {
     });
     if (reasoning) payload.reasoning = reasoning;
 
-    const response = await this.request('/responses', payload);
-    const text = extractResponseText(response);
+    const text = this.stream
+      ? await this.requestStream('/responses', { ...payload, stream: true }, { mode: 'responses' })
+      : extractResponseText(await this.request('/responses', payload));
     if (!text) {
       throw new Error('OpenAI response did not contain output text');
     }
@@ -142,8 +145,9 @@ export class OpenAIReviewClient {
       payload.reasoning_effort = this.reasoningEffort;
     }
 
-    const response = await this.request('/chat/completions', payload);
-    const text = response?.choices?.[0]?.message?.content || '';
+    const text = this.stream
+      ? await this.requestStream('/chat/completions', { ...payload, stream: true }, { mode: 'chat' })
+      : (await this.request('/chat/completions', payload))?.choices?.[0]?.message?.content || '';
     if (!text) {
       throw new Error('OpenAI chat completion did not contain message content');
     }
@@ -166,6 +170,27 @@ export class OpenAIReviewClient {
       });
     } catch (error) {
       throw new Error(`OpenAI API request failed: ${error.message}`);
+    }
+  }
+
+  async requestStream(path, payload, { mode }) {
+    try {
+      return await requestTextStreamWithRetry(`${this.baseUrl}${path}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+        },
+        body: JSON.stringify(payload),
+      }, {
+        mode,
+        timeoutMs: this.timeoutMs,
+        retries: this.retries,
+        retryDelayMs: 800,
+      });
+    } catch (error) {
+      throw new Error(`OpenAI API stream request failed: ${error.message}`);
     }
   }
 }
@@ -240,6 +265,169 @@ function extractResponseText(response) {
     }
   }
   return chunks.join('\n').trim();
+}
+
+async function requestTextStreamWithRetry(url, init = {}, options = {}) {
+  const retries = Math.max(0, Number(options.retries || 0));
+  const retryDelayMs = Math.max(0, Number(options.retryDelayMs ?? 800));
+  let lastError;
+
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      if (attempt > 0) {
+        console.error(`[ai-pr-reviewer] Retrying OpenAI stream request (${attempt}/${retries})...`);
+      }
+      return await requestTextStream(url, init, options);
+    } catch (error) {
+      if (attempt >= retries || !isRetryableStreamError(error)) throw error;
+      lastError = error;
+      await sleep(backoff(retryDelayMs, attempt));
+    }
+  }
+
+  throw lastError || new Error('OpenAI stream request failed');
+}
+
+async function requestTextStream(url, init = {}, options = {}) {
+  const timeoutMs = Math.max(0, Number(options.timeoutMs || 0));
+  const controller = timeoutMs ? new AbortController() : null;
+  const startedAt = Date.now();
+  let outputChars = 0;
+  let events = 0;
+
+  const heartbeat = setInterval(() => {
+    const seconds = Math.round((Date.now() - startedAt) / 1000);
+    console.error(`[ai-pr-reviewer] OpenAI stream waiting... ${seconds}s, ${events} events, ${outputChars} output chars`);
+  }, 30_000);
+  heartbeat.unref?.();
+
+  const timeout = controller
+    ? setTimeout(() => controller.abort(new Error(`OpenAI stream timed out after ${timeoutMs}ms`)), timeoutMs)
+    : null;
+
+  try {
+    console.error('[ai-pr-reviewer] OpenAI stream started...');
+    const response = await fetch(url, {
+      ...init,
+      signal: controller?.signal || init.signal,
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      const error = new Error(`HTTP ${response.status} ${response.statusText}: ${text || response.statusText}`);
+      error.status = response.status;
+      throw error;
+    }
+
+    if (!response.body) throw new Error('OpenAI stream response did not contain a body');
+
+    const text = await readSseText(response.body, {
+      mode: options.mode,
+      onEvent: () => {
+        events += 1;
+      },
+      onText: (value) => {
+        outputChars += value.length;
+      },
+    });
+    const seconds = Math.round((Date.now() - startedAt) / 1000);
+    console.error(`[ai-pr-reviewer] OpenAI stream completed in ${seconds}s, ${events} events, ${text.length} output chars.`);
+    return text;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    clearInterval(heartbeat);
+  }
+}
+
+async function readSseText(body, { mode, onEvent, onText } = {}) {
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let output = '';
+  let completedText = '';
+
+  for await (const chunk of body) {
+    buffer += decoder.decode(chunk, { stream: true });
+    const result = consumeSseBuffer(buffer, { mode, output, completedText, onEvent, onText });
+    buffer = result.buffer;
+    output = result.output;
+    completedText = result.completedText;
+  }
+
+  buffer += decoder.decode();
+  const result = consumeSseBuffer(`${buffer}\n\n`, { mode, output, completedText, onEvent, onText });
+  output = result.output;
+  completedText = result.completedText;
+
+  return (output || completedText).trim();
+}
+
+function consumeSseBuffer(buffer, state) {
+  let current = buffer;
+  let output = state.output || '';
+  let completedText = state.completedText || '';
+
+  while (true) {
+    const boundary = findSseBoundary(current);
+    if (!boundary) break;
+
+    const rawEvent = current.slice(0, boundary.index);
+    current = current.slice(boundary.index + boundary.length);
+    const data = extractSseData(rawEvent);
+    if (!data || data === '[DONE]') continue;
+
+    let event;
+    try {
+      event = JSON.parse(data);
+    } catch {
+      continue;
+    }
+
+    state.onEvent?.(event);
+    const delta = extractStreamDelta(event, state.mode);
+    if (delta) {
+      output += delta;
+      state.onText?.(delta);
+    }
+
+    const finalText = extractCompletedStreamText(event, state.mode);
+    if (finalText) completedText = finalText;
+  }
+
+  return { buffer: current, output, completedText };
+}
+
+function findSseBoundary(value) {
+  const lf = value.indexOf('\n\n');
+  const crlf = value.indexOf('\r\n\r\n');
+  if (lf < 0 && crlf < 0) return null;
+  if (lf >= 0 && (crlf < 0 || lf < crlf)) return { index: lf, length: 2 };
+  return { index: crlf, length: 4 };
+}
+
+function extractSseData(rawEvent) {
+  return String(rawEvent || '')
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith('data:'))
+    .map((line) => line.slice(5).trimStart())
+    .join('\n')
+    .trim();
+}
+
+function extractStreamDelta(event, mode) {
+  if (mode === 'chat') {
+    return String(event?.choices?.[0]?.delta?.content || event?.choices?.[0]?.message?.content || '');
+  }
+
+  if (event?.type === 'response.output_text.delta') return String(event.delta || '');
+  if (typeof event?.delta === 'string' && /output_text\.delta$/.test(String(event?.type || ''))) return event.delta;
+  return '';
+}
+
+function extractCompletedStreamText(event, mode) {
+  if (mode === 'chat') return '';
+  if (event?.type === 'response.output_text.done' && typeof event.text === 'string') return event.text;
+  if (event?.type === 'response.completed' && event.response) return extractResponseText(event.response);
+  return '';
 }
 
 function parseJsonObject(text) {
@@ -354,6 +542,25 @@ function buildResponsesReasoningConfig({ effort, summary }) {
   if (effort) reasoning.effort = effort;
   if (summary) reasoning.summary = summary;
   return Object.keys(reasoning).length ? reasoning : null;
+}
+
+function isRetryableStreamError(error) {
+  return error?.name === 'AbortError'
+    || isRetryableStatus(error?.status)
+    || /timed out|timeout|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|fetch failed/i.test(String(error?.message || error));
+}
+
+function isRetryableStatus(status) {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+function backoff(baseMs, attempt) {
+  const jitter = Math.floor(Math.random() * Math.min(250, baseMs));
+  return baseMs * (2 ** attempt) + jitter;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 

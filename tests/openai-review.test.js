@@ -24,6 +24,15 @@ class CaptureReviewClient extends OpenAIReviewClient {
   }
 }
 
+class StreamCaptureReviewClient extends OpenAIReviewClient {
+  async requestStream(path, payload, options) {
+    this.lastPath = path;
+    this.lastPayload = payload;
+    this.lastStreamOptions = options;
+    return JSON.stringify({ summary: 'ok', findings: [] });
+  }
+}
+
 const reviewInput = {
   repo: { owner: 'owner', name: 'repo' },
   pr: {
@@ -42,6 +51,7 @@ test('Responses API payload supports reasoning effort and summary', async () => 
     apiKey: 'test',
     model: 'gpt-test',
     apiMode: 'responses',
+    stream: false,
     reasoningEffort: 'x-high',
     reasoningSummary: 'auto',
   });
@@ -60,6 +70,7 @@ test('Chat Completions payload supports reasoning_effort', async () => {
     apiKey: 'test',
     model: 'gpt-test',
     apiMode: 'chat',
+    stream: false,
     reasoningEffort: 'high',
     reasoningSummary: 'auto',
   });
@@ -86,6 +97,7 @@ test('Responses parser accepts JSON followed by extra provider text', async () =
     apiKey: 'test',
     model: 'gpt-test',
     apiMode: 'responses',
+    stream: false,
   });
 
   const review = await client.review(reviewInput);
@@ -115,10 +127,40 @@ test('Chat parser accepts fenced JSON followed by extra provider text', async ()
     apiKey: 'test',
     model: 'gpt-test',
     apiMode: 'chat',
+    stream: false,
   });
 
   const review = await client.review(reviewInput);
 
   assert.equal(review.summary, 'ok');
   assert.deepEqual(review.findings, []);
+});
+
+test('Responses API stream mode is enabled by default', async () => {
+  const client = new StreamCaptureReviewClient({
+    apiKey: 'test',
+    model: 'gpt-test',
+    apiMode: 'responses',
+  });
+
+  await client.review(reviewInput);
+
+  assert.equal(client.lastPath, '/responses');
+  assert.equal(client.lastPayload.stream, true);
+  assert.equal(client.lastStreamOptions.mode, 'responses');
+});
+
+test('Chat Completions stream mode sends stream payload', async () => {
+  const client = new StreamCaptureReviewClient({
+    apiKey: 'test',
+    model: 'gpt-test',
+    apiMode: 'chat',
+    stream: true,
+  });
+
+  await client.review(reviewInput);
+
+  assert.equal(client.lastPath, '/chat/completions');
+  assert.equal(client.lastPayload.stream, true);
+  assert.equal(client.lastStreamOptions.mode, 'chat');
 });

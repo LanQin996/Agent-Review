@@ -19,6 +19,7 @@ GitHub 仓库：<https://github.com/LanQin996/Agent-Review>
 - **一键修改建议** — 支持 GitHub 原生 `suggestion` 代码块
 - **自定义模型/API** — 支持官方 `/responses`，也支持第三方常见 `/chat/completions`
 - **模型推理强度** — 支持 `OPENAI_REASONING_EFFORT`，可配置 `minimal/low/medium/high/xhigh`
+- **流式进度** — 默认开启 stream，长耗时 / XHigh 模型可在 Actions 日志持续看到进度；如兼容服务不支持可设 `OPENAI_STREAM=false`
 - **自定义审查规则** — 默认读取 `.github/ai-review.md` 和 `AGENTS.md`
 - **审批门禁** — `P0/P1` 自动 `REQUEST_CHANGES`，`P2/P3` 只评论
 - **多 commit 友好** — PR 追加 commit 后自动重审，并通过隐藏 marker 去重
@@ -42,6 +43,7 @@ OPENAI_API_KEY=sk-...
 OPENAI_MODEL=your-model
 OPENAI_API_MODE=chat
 OPENAI_REASONING_EFFORT=xhigh
+OPENAI_STREAM=true
 OPENAI_BASE_URL=https://api.example.com/v1
 ```
 
@@ -62,6 +64,20 @@ OPENAI_REASONING_SUMMARY=auto
 ```
 
 `OPENAI_REASONING_EFFORT` 会透传给模型接口。常见值包括 `minimal`、`low`、`medium`、`high`，部分 OpenAI-compatible 服务也支持 `xhigh` / `x-high`。留空则使用模型默认推理强度。
+
+流式响应默认开启。如果使用 `xhigh` 这类长耗时推理，建议同时拉长超时时间：
+
+```text
+OPENAI_TIMEOUT_MS=900000
+```
+
+GitHub Actions 日志会显示类似 `OpenAI stream waiting... 300s, ... output chars` 的进度，避免长时间看起来卡住。注意：PR Review 评论仍会等模型完整 JSON 返回后一次性发布，GitHub 不支持把一条 review 边生成边逐 token 写入。
+
+如果你的第三方 OpenAI-compatible 服务不支持 `stream`，可以关闭：
+
+```text
+OPENAI_STREAM=false
+```
 
 ### 2. 添加 GitHub Actions
 
@@ -147,7 +163,7 @@ node ./bin/ai-pr-reviewer.js --dry-run
 | 模块 | 功能 |
 |------|------|
 | GitHub | 拉取 PR、changed files、review comments、发布 Review 和 PR comment |
-| OpenAI | 支持 `responses` / `chat` 两种 API mode，可配置 reasoning effort |
+| OpenAI | 支持 `responses` / `chat` 两种 API mode，可配置 reasoning effort 和 stream |
 | Prompt | 内置审查策略 + 仓库自定义规则 |
 | 行号校验 | 只允许评论真实存在于 diff 的 `RIGHT` / `LEFT` 行 |
 | Suggestion | 自动渲染 GitHub 原生一键修改建议 |
@@ -273,6 +289,7 @@ SUMMARY_MODE: comment
 | `OPENAI_API_MODE` | `responses` | `responses` 或 `chat` |
 | `OPENAI_REASONING_EFFORT` | 空 | 推理强度，例如 `minimal` / `low` / `medium` / `high` / `xhigh` |
 | `OPENAI_REASONING_SUMMARY` | 空 | Responses API reasoning summary，例如 `auto` / `concise` / `detailed` |
+| `OPENAI_STREAM` | `true` | 是否使用流式响应并在 CI 日志输出进度；如兼容服务不支持可设为 `false` |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | API base URL，通常带 `/v1` |
 | `OPENAI_TIMEOUT_MS` | `120000` | OpenAI 请求超时 |
 | `OPENAI_RETRIES` | `2` | OpenAI 临时失败重试次数 |
@@ -309,6 +326,8 @@ github-ai-pr-reviewer --dry-run --repo owner/name --pr 123
 --pr 123                       PR 编号，默认 PR_NUMBER
 --model model                  模型，默认 OPENAI_MODEL 或 gpt-5.5
 --openai-api-mode responses    responses 或 chat
+--openai-stream true           流式接收模型响应并在 CI 日志输出进度，默认开启
+--no-openai-stream             关闭流式响应
 --reasoning-effort xhigh       模型推理强度，留空使用模型默认
 --reasoning-summary auto       Responses API reasoning summary
 --openai-base-url url          OpenAI-compatible API base URL
@@ -360,6 +379,7 @@ npm publish --access public
     OPENAI_API_MODE: ${{ vars.OPENAI_API_MODE || 'chat' }}
     OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT }}
     OPENAI_REASONING_SUMMARY: ${{ vars.OPENAI_REASONING_SUMMARY }}
+    OPENAI_STREAM: ${{ vars.OPENAI_STREAM || 'true' }}
     OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
     GITHUB_TOKEN: ${{ github.token }}
     GITHUB_REPOSITORY: ${{ github.repository }}

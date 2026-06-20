@@ -75,12 +75,14 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   const rulesText = formatRulesForPrompt(rules);
 
   const reasoningText = args.reasoningEffort ? `, reasoning=${args.reasoningEffort}` : '';
-  console.error(`[ai-pr-reviewer] Reviewing ${reviewableFiles.length}/${files.length} changed files with ${args.model} (${args.openaiApiMode}${reasoningText}); ignored=${ignoredFiles.length}...`);
+  const streamText = args.openaiStream ? ', stream=true' : '';
+  console.error(`[ai-pr-reviewer] Reviewing ${reviewableFiles.length}/${files.length} changed files with ${args.model} (${args.openaiApiMode}${reasoningText}${streamText}); ignored=${ignoredFiles.length}...`);
   const openai = new OpenAIReviewClient({
     apiKey: args.openaiApiKey,
     baseUrl: args.openaiBaseUrl,
     model: args.model,
     apiMode: args.openaiApiMode,
+    stream: args.openaiStream,
     reasoningEffort: args.reasoningEffort,
     reasoningSummary: args.reasoningSummary,
     timeoutMs: args.openaiTimeoutMs,

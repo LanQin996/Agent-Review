@@ -36,6 +36,8 @@ jobs:
           OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT }}
           # 可选：Responses API reasoning summary，例如 auto / concise / detailed
           OPENAI_REASONING_SUMMARY: ${{ vars.OPENAI_REASONING_SUMMARY }}
+          # 默认开启流式进度；如兼容服务不支持 stream，可在仓库变量中设为 false
+          OPENAI_STREAM: ${{ vars.OPENAI_STREAM || 'true' }}
           # 第三方 / 自建 OpenAI-compatible 服务时配置，例如：https://api.example.com/v1
           OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL || 'https://api.openai.com/v1' }}
           OPENAI_TIMEOUT_MS: ${{ vars.OPENAI_TIMEOUT_MS || '120000' }}

@@ -10,6 +10,7 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     maxComments: parseInteger(env.MAX_COMMENTS, 30),
     model: env.OPENAI_MODEL || 'gpt-5.5',
     openaiApiMode: env.OPENAI_API_MODE || 'responses',
+    openaiStream: parseBoolean(env.OPENAI_STREAM || env.OPENAI_API_STREAM, true),
     reasoningEffort: normalizeReasoningEffort(env.OPENAI_REASONING_EFFORT || ''),
     reasoningSummary: normalizeReasoningSummary(env.OPENAI_REASONING_SUMMARY || ''),
     openaiTimeoutMs: parseInteger(env.OPENAI_TIMEOUT_MS, 120_000),
@@ -39,6 +40,16 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     const arg = argv[index];
     if (arg === '--post') args.post = true;
     else if (arg === '--dry-run') args.dryRun = true;
+    else if (arg === '--stream' || arg === '--openai-stream') {
+      const next = argv[index + 1];
+      if (isBooleanLiteral(next)) {
+        args.openaiStream = parseBoolean(next, true);
+        index += 1;
+      } else {
+        args.openaiStream = true;
+      }
+    }
+    else if (arg === '--no-stream' || arg === '--no-openai-stream') args.openaiStream = false;
     else if (arg === '--include-untouched-context') args.includeUntouchedContext = true;
     else if (arg === '--help' || arg === '-h') args.help = true;
     else if (arg === '--version' || arg === '-v') args.version = true;
@@ -99,6 +110,10 @@ function setOption(args, key, value) {
     case 'openaiApiMode':
       args.openaiApiMode = value;
       break;
+    case 'stream':
+    case 'openaiStream':
+      args.openaiStream = parseBoolean(value, args.openaiStream);
+      break;
     case 'reasoningEffort':
     case 'openaiReasoningEffort':
       args.reasoningEffort = normalizeReasoningEffort(value);
@@ -158,6 +173,10 @@ function setOption(args, key, value) {
 function parseBoolean(value, fallback) {
   if (value == null || value === '') return fallback;
   return ['1', 'true', 'yes', 'on'].includes(String(value).trim().toLowerCase());
+}
+
+function isBooleanLiteral(value) {
+  return ['1', '0', 'true', 'false', 'yes', 'no', 'on', 'off'].includes(String(value ?? '').trim().toLowerCase());
 }
 
 function parseNonNegativeInteger(value, fallback) {
@@ -224,6 +243,7 @@ Options:
   --pr 123                       Pull request number. Defaults to PR_NUMBER or event payload.
   --model model                  OpenAI model. Defaults to OPENAI_MODEL or gpt-5.5.
   --openai-api-mode responses    responses or chat. Defaults to OPENAI_API_MODE or responses.
+  --openai-stream true           Stream OpenAI response and print progress in CI logs. Enabled by default.
   --reasoning-effort xhigh       Reasoning effort: none, minimal, low, medium, high, or xhigh.
   --reasoning-summary auto       Responses API reasoning summary: auto, concise, or detailed.
   --openai-timeout-ms 120000     OpenAI request timeout.
