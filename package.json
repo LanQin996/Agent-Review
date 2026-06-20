@@ -1,6 +1,6 @@
 {
   "name": "github-ai-pr-reviewer",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Custom OpenAI-powered GitHub PR reviewer that posts inline review comments and suggestions.",
   "homepage": "https://github.com/LanQin996/Agent-Review#readme",
   "repository": {

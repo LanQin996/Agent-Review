@@ -68,7 +68,7 @@ OPENAI_REASONING_SUMMARY=auto
 流式响应默认开启。如果使用 `xhigh` 这类长耗时推理，建议同时拉长超时时间：
 
 ```text
-OPENAI_TIMEOUT_MS=900000
+OPENAI_TIMEOUT_MS=600000
 ```
 
 GitHub Actions 日志会显示类似 `OpenAI stream waiting... 300s, ... output chars` 的进度，避免长时间看起来卡住。注意：PR Review 评论仍会等模型完整 JSON 返回后一次性发布，GitHub 不支持把一条 review 边生成边逐 token 写入。
@@ -291,7 +291,7 @@ SUMMARY_MODE: comment
 | `OPENAI_REASONING_SUMMARY` | 空 | Responses API reasoning summary，例如 `auto` / `concise` / `detailed` |
 | `OPENAI_STREAM` | `true` | 是否使用流式响应并在 CI 日志输出进度；如兼容服务不支持可设为 `false` |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | API base URL，通常带 `/v1` |
-| `OPENAI_TIMEOUT_MS` | `120000` | OpenAI 请求超时 |
+| `OPENAI_TIMEOUT_MS` | `600000` | OpenAI 请求超时，默认 10 分钟 |
 | `OPENAI_RETRIES` | `2` | OpenAI 临时失败重试次数 |
 | `GITHUB_TOKEN` | 必填 | GitHub token，Actions 中用 `${{ github.token }}` |
 | `GITHUB_REPOSITORY` | 自动 | `owner/repo` |
@@ -331,7 +331,7 @@ github-ai-pr-reviewer --dry-run --repo owner/name --pr 123
 --reasoning-effort xhigh       模型推理强度，留空使用模型默认
 --reasoning-summary auto       Responses API reasoning summary
 --openai-base-url url          OpenAI-compatible API base URL
---openai-timeout-ms 120000     OpenAI 请求超时
+--openai-timeout-ms 600000     OpenAI 请求超时
 --openai-retries 2             OpenAI 重试次数
 --rules file1,file2            审查规则文件
 --ignore file1,file2           ignore 文件，默认 .ai-reviewignore

@@ -13,6 +13,7 @@ test('parseArgs supports --key=value and env defaults', () => {
   assert.equal(args.prNumber, 42);
   assert.equal(args.model, 'gpt-test');
   assert.equal(args.openaiStream, true);
+  assert.equal(args.openaiTimeoutMs, 600_000);
   assert.equal(args.dryRun, true);
 });
 

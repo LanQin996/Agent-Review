@@ -13,7 +13,7 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     openaiStream: parseBoolean(env.OPENAI_STREAM || env.OPENAI_API_STREAM, true),
     reasoningEffort: normalizeReasoningEffort(env.OPENAI_REASONING_EFFORT || ''),
     reasoningSummary: normalizeReasoningSummary(env.OPENAI_REASONING_SUMMARY || ''),
-    openaiTimeoutMs: parseInteger(env.OPENAI_TIMEOUT_MS, 120_000),
+    openaiTimeoutMs: parseInteger(env.OPENAI_TIMEOUT_MS, 600_000),
     openaiRetries: parseNonNegativeInteger(env.OPENAI_RETRIES, 2),
     githubTimeoutMs: parseInteger(env.GITHUB_TIMEOUT_MS, 30_000),
     githubRetries: parseNonNegativeInteger(env.GITHUB_RETRIES, 2),
@@ -246,7 +246,7 @@ Options:
   --openai-stream true           Stream OpenAI response and print progress in CI logs. Enabled by default.
   --reasoning-effort xhigh       Reasoning effort: none, minimal, low, medium, high, or xhigh.
   --reasoning-summary auto       Responses API reasoning summary: auto, concise, or detailed.
-  --openai-timeout-ms 120000     OpenAI request timeout.
+  --openai-timeout-ms 600000     OpenAI request timeout.
   --openai-retries 2             OpenAI retry count for transient failures.
   --openai-base-url url          OpenAI-compatible API base URL. Defaults to OPENAI_BASE_URL or https://api.openai.com/v1.
   --rules file1,file2            Rule files. Defaults to .github/ai-review.md,AGENTS.md.
