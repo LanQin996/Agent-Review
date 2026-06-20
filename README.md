@@ -11,6 +11,8 @@
 
 npm 仓库：<https://www.npmjs.com/package/github-ai-pr-reviewer>
 
+GitHub 仓库：<https://github.com/LanQin996/Agent-Review>
+
 ## 特性
 
 - **行级 PR 审查** — 基于 GitHub Review API 在具体 diff 行下评论
