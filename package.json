@@ -1,10 +1,11 @@
 {
-  "name": "ai-pr-reviewer",
+  "name": "github-ai-pr-reviewer",
   "version": "0.1.0",
   "description": "Custom OpenAI-powered GitHub PR reviewer that posts inline review comments and suggestions.",
   "type": "module",
   "bin": {
-    "ai-pr-reviewer": "./bin/ai-pr-reviewer.js"
+    "ai-pr-reviewer": "bin/ai-pr-reviewer.js",
+    "github-ai-pr-reviewer": "bin/ai-pr-reviewer.js"
   },
   "files": [
     "bin",

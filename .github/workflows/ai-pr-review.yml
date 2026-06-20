@@ -24,7 +24,7 @@ jobs:
           node-version: 20
 
       # 当前仓库自测时使用本地 CLI；发布到 npm 后可改为：
-      #   npx ai-pr-reviewer --post
+      #   npx github-ai-pr-reviewer --post
       - name: Run AI PR reviewer
         run: node ./bin/ai-pr-reviewer.js --post
         env:

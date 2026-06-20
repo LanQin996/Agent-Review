@@ -190,11 +190,11 @@ function readFile(path) {
 }
 
 export function printHelp() {
-  console.log(`ai-pr-reviewer
+  console.log(`github-ai-pr-reviewer
 
 Usage:
-  ai-pr-reviewer --post
-  ai-pr-reviewer --dry-run --repo owner/name --pr 123
+  github-ai-pr-reviewer --post
+  github-ai-pr-reviewer --dry-run --repo owner/name --pr 123
 
 Options:
   --post                         Post GitHub PR review comments.
