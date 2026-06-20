@@ -70,3 +70,55 @@ test('Chat Completions payload supports reasoning_effort', async () => {
   assert.equal(client.lastPayload.reasoning_effort, 'high');
   assert.equal('reasoning' in client.lastPayload, false);
 });
+
+test('Responses parser accepts JSON followed by extra provider text', async () => {
+  class NoisyResponsesClient extends CaptureReviewClient {
+    async request(path, payload) {
+      this.lastPath = path;
+      this.lastPayload = payload;
+      return {
+        output_text: '{"summary":"ok","findings":[]}\n\nreasoning summary: checked diff',
+      };
+    }
+  }
+
+  const client = new NoisyResponsesClient({
+    apiKey: 'test',
+    model: 'gpt-test',
+    apiMode: 'responses',
+  });
+
+  const review = await client.review(reviewInput);
+
+  assert.equal(review.summary, 'ok');
+  assert.deepEqual(review.findings, []);
+});
+
+test('Chat parser accepts fenced JSON followed by extra provider text', async () => {
+  class NoisyChatClient extends CaptureReviewClient {
+    async request(path, payload) {
+      this.lastPath = path;
+      this.lastPayload = payload;
+      return {
+        choices: [
+          {
+            message: {
+              content: '```json\n{"summary":"ok","findings":[]}\n```\nextra text',
+            },
+          },
+        ],
+      };
+    }
+  }
+
+  const client = new NoisyChatClient({
+    apiKey: 'test',
+    model: 'gpt-test',
+    apiMode: 'chat',
+  });
+
+  const review = await client.review(reviewInput);
+
+  assert.equal(review.summary, 'ok');
+  assert.deepEqual(review.findings, []);
+});

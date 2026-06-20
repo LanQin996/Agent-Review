@@ -243,13 +243,71 @@ function extractResponseText(response) {
 }
 
 function parseJsonObject(text) {
+  const source = String(text || '').trim();
   try {
-    return JSON.parse(text);
-  } catch {
-    const match = /\{[\s\S]*\}/.exec(text);
-    if (!match) throw new Error('OpenAI output was not valid JSON');
-    return JSON.parse(match[0]);
+    return JSON.parse(source);
+  } catch (directError) {
+    const candidate = extractFirstJsonObject(source);
+    if (!candidate) {
+      throw new Error(`OpenAI output was not valid JSON: ${directError.message}`);
+    }
+    try {
+      return JSON.parse(candidate);
+    } catch (candidateError) {
+      throw new Error(`OpenAI output was not valid JSON: ${candidateError.message}`);
+    }
   }
+}
+
+function extractFirstJsonObject(text) {
+  const source = String(text || '');
+  for (let start = source.indexOf('{'); start >= 0; start = source.indexOf('{', start + 1)) {
+    const end = findMatchingObjectEnd(source, start);
+    if (end < 0) continue;
+
+    const candidate = source.slice(start, end + 1);
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch {
+      // This brace pair was probably part of prose or malformed markdown.
+      // Keep scanning for the first complete object that is valid JSON.
+    }
+  }
+  return '';
+}
+
+function findMatchingObjectEnd(source, start) {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === '\\') {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+    } else if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) return index;
+      if (depth < 0) return -1;
+    }
+  }
+
+  return -1;
 }
 
 function normalizeReview(review) {
