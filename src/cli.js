@@ -10,6 +10,8 @@ export function parseArgs(argv = process.argv.slice(2), env = process.env) {
     maxComments: parseInteger(env.MAX_COMMENTS, 30),
     model: env.OPENAI_MODEL || 'gpt-5.5',
     openaiApiMode: env.OPENAI_API_MODE || 'responses',
+    reasoningEffort: normalizeReasoningEffort(env.OPENAI_REASONING_EFFORT || ''),
+    reasoningSummary: normalizeReasoningSummary(env.OPENAI_REASONING_SUMMARY || ''),
     openaiTimeoutMs: parseInteger(env.OPENAI_TIMEOUT_MS, 120_000),
     openaiRetries: parseNonNegativeInteger(env.OPENAI_RETRIES, 2),
     githubTimeoutMs: parseInteger(env.GITHUB_TIMEOUT_MS, 30_000),
@@ -97,6 +99,14 @@ function setOption(args, key, value) {
     case 'openaiApiMode':
       args.openaiApiMode = value;
       break;
+    case 'reasoningEffort':
+    case 'openaiReasoningEffort':
+      args.reasoningEffort = normalizeReasoningEffort(value);
+      break;
+    case 'reasoningSummary':
+    case 'openaiReasoningSummary':
+      args.reasoningSummary = normalizeReasoningSummary(value);
+      break;
     case 'openaiTimeoutMs':
     case 'githubTimeoutMs':
       args[normalized] = parseInteger(value, args[normalized]);
@@ -160,6 +170,17 @@ function parseInteger(value, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function normalizeReasoningEffort(value) {
+  const effort = String(value || '').trim().toLowerCase().replace(/[_-]/g, '');
+  if (!effort || ['none', 'off', 'false', 'disabled'].includes(effort)) return '';
+  if (['xhigh', 'xlarge', 'extra'].includes(effort)) return 'xhigh';
+  return effort;
+}
+
+function normalizeReasoningSummary(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 function splitCsv(value) {
   return String(value || '')
     .split(',')
@@ -203,6 +224,8 @@ Options:
   --pr 123                       Pull request number. Defaults to PR_NUMBER or event payload.
   --model model                  OpenAI model. Defaults to OPENAI_MODEL or gpt-5.5.
   --openai-api-mode responses    responses or chat. Defaults to OPENAI_API_MODE or responses.
+  --reasoning-effort xhigh       Reasoning effort: none, minimal, low, medium, high, or xhigh.
+  --reasoning-summary auto       Responses API reasoning summary: auto, concise, or detailed.
   --openai-timeout-ms 120000     OpenAI request timeout.
   --openai-retries 2             OpenAI retry count for transient failures.
   --openai-base-url url          OpenAI-compatible API base URL. Defaults to OPENAI_BASE_URL or https://api.openai.com/v1.

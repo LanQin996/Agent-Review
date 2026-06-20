@@ -16,6 +16,7 @@ npm 仓库：<https://www.npmjs.com/package/github-ai-pr-reviewer>
 - **行级 PR 审查** — 基于 GitHub Review API 在具体 diff 行下评论
 - **一键修改建议** — 支持 GitHub 原生 `suggestion` 代码块
 - **自定义模型/API** — 支持官方 `/responses`，也支持第三方常见 `/chat/completions`
+- **模型推理强度** — 支持 `OPENAI_REASONING_EFFORT`，可配置 `minimal/low/medium/high/xhigh`
 - **自定义审查规则** — 默认读取 `.github/ai-review.md` 和 `AGENTS.md`
 - **审批门禁** — `P0/P1` 自动 `REQUEST_CHANGES`，`P2/P3` 只评论
 - **多 commit 友好** — PR 追加 commit 后自动重审，并通过隐藏 marker 去重
@@ -38,6 +39,7 @@ OPENAI_API_KEY=sk-...
 ```text
 OPENAI_MODEL=your-model
 OPENAI_API_MODE=chat
+OPENAI_REASONING_EFFORT=xhigh
 OPENAI_BASE_URL=https://api.example.com/v1
 ```
 
@@ -49,6 +51,15 @@ chat      -> ${OPENAI_BASE_URL}/chat/completions
 ```
 
 第三方服务大多使用 `chat`，并且 `OPENAI_BASE_URL` 通常需要带 `/v1`。
+
+如果模型支持 reasoning / thinking 强度，可以配置：
+
+```text
+OPENAI_REASONING_EFFORT=xhigh
+OPENAI_REASONING_SUMMARY=auto
+```
+
+`OPENAI_REASONING_EFFORT` 会透传给模型接口。常见值包括 `minimal`、`low`、`medium`、`high`，部分 OpenAI-compatible 服务也支持 `xhigh` / `x-high`。留空则使用模型默认推理强度。
 
 ### 2. 添加 GitHub Actions
 
@@ -134,7 +145,7 @@ node ./bin/ai-pr-reviewer.js --dry-run
 | 模块 | 功能 |
 |------|------|
 | GitHub | 拉取 PR、changed files、review comments、发布 Review 和 PR comment |
-| OpenAI | 支持 `responses` / `chat` 两种 API mode |
+| OpenAI | 支持 `responses` / `chat` 两种 API mode，可配置 reasoning effort |
 | Prompt | 内置审查策略 + 仓库自定义规则 |
 | 行号校验 | 只允许评论真实存在于 diff 的 `RIGHT` / `LEFT` 行 |
 | Suggestion | 自动渲染 GitHub 原生一键修改建议 |
@@ -258,6 +269,8 @@ SUMMARY_MODE: comment
 | `OPENAI_API_KEY` | 必填 | OpenAI-compatible API key |
 | `OPENAI_MODEL` | `gpt-5.5` | 模型名 |
 | `OPENAI_API_MODE` | `responses` | `responses` 或 `chat` |
+| `OPENAI_REASONING_EFFORT` | 空 | 推理强度，例如 `minimal` / `low` / `medium` / `high` / `xhigh` |
+| `OPENAI_REASONING_SUMMARY` | 空 | Responses API reasoning summary，例如 `auto` / `concise` / `detailed` |
 | `OPENAI_BASE_URL` | `https://api.openai.com/v1` | API base URL，通常带 `/v1` |
 | `OPENAI_TIMEOUT_MS` | `120000` | OpenAI 请求超时 |
 | `OPENAI_RETRIES` | `2` | OpenAI 临时失败重试次数 |
@@ -294,6 +307,8 @@ github-ai-pr-reviewer --dry-run --repo owner/name --pr 123
 --pr 123                       PR 编号，默认 PR_NUMBER
 --model model                  模型，默认 OPENAI_MODEL 或 gpt-5.5
 --openai-api-mode responses    responses 或 chat
+--reasoning-effort xhigh       模型推理强度，留空使用模型默认
+--reasoning-summary auto       Responses API reasoning summary
 --openai-base-url url          OpenAI-compatible API base URL
 --openai-timeout-ms 120000     OpenAI 请求超时
 --openai-retries 2             OpenAI 重试次数
@@ -341,6 +356,8 @@ npm publish --access public
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
     OPENAI_API_MODE: ${{ vars.OPENAI_API_MODE || 'chat' }}
+    OPENAI_REASONING_EFFORT: ${{ vars.OPENAI_REASONING_EFFORT }}
+    OPENAI_REASONING_SUMMARY: ${{ vars.OPENAI_REASONING_SUMMARY }}
     OPENAI_BASE_URL: ${{ vars.OPENAI_BASE_URL }}
     GITHUB_TOKEN: ${{ github.token }}
     GITHUB_REPOSITORY: ${{ github.repository }}

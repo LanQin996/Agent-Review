@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildReviewBody, normalizeSummaryMode, shouldCreateReviewSummary, shouldUpsertIssueSummary, SUMMARY_MARKER } from '../src/formatter.js';
+import {
+  buildCommentBody,
+  buildReviewBody,
+  normalizeSummaryMode,
+  shouldCreateReviewSummary,
+  shouldUpsertIssueSummary,
+  SUMMARY_MARKER,
+} from '../src/formatter.js';
 
 test('summary mode helpers normalize valid modes', () => {
   assert.equal(normalizeSummaryMode('comment'), 'comment');
@@ -22,4 +29,19 @@ test('buildReviewBody includes summary marker for upsert', () => {
     policyText: 'policy',
   });
   assert.match(body, new RegExp(SUMMARY_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('buildCommentBody does not append reaction footer', () => {
+  const body = buildCommentBody({
+    severity: 'P2',
+    path: 'src/demo.js',
+    line: 12,
+    side: 'RIGHT',
+    title: '修复边界条件',
+    body: '这里需要处理空值。',
+    suggestion: '',
+  });
+
+  assert.doesNotMatch(body, /Useful\? React/i);
+  assert.match(body, /修复边界条件/);
 });

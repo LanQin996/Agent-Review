@@ -4,7 +4,16 @@ import { buildFindingMarker } from './dedupe.js';
 export const REVIEW_MARKER = '<!-- ai-pr-reviewer -->';
 export const SUMMARY_MARKER = '<!-- ai-pr-reviewer:summary -->';
 
-export function buildReviewBody({ review, validFindings, skippedFindings, commitId, model, reviewEvent, policyText }) {
+export function buildReviewBody({
+  review,
+  validFindings,
+  skippedFindings,
+  commitId,
+  model,
+  reasoningEffort,
+  reviewEvent,
+  policyText,
+}) {
   const counts = countBySeverity(validFindings);
   const total = validFindings.length;
   const countText = ['P0', 'P1', 'P2', 'P3']
@@ -27,6 +36,7 @@ ${review.summary}
 
 **Reviewed commit:** \`${shortSha(commitId)}\`  
 **Model:** \`${model}\`  
+${reasoningEffort ? `**Reasoning effort:** \`${reasoningEffort}\`  \n` : ''}
 **Review event:** \`${reviewEvent || 'COMMENT'}\`  
 ${policyText ? `**Policy:** ${policyText}  \n` : ''}**Inline findings:** ${total} (${countText})${skippedText}
 
@@ -50,7 +60,6 @@ export function buildCommentBody(finding) {
     parts.push('', '```suggestion', suggestion, '```');
   }
 
-  parts.push('', 'Useful? React with 👍 / 👎.');
   return parts.join('\n');
 }
 

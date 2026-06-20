@@ -74,12 +74,15 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   const rules = loadRuleFiles(args.ruleFiles);
   const rulesText = formatRulesForPrompt(rules);
 
-  console.error(`[ai-pr-reviewer] Reviewing ${reviewableFiles.length}/${files.length} changed files with ${args.model} (${args.openaiApiMode}); ignored=${ignoredFiles.length}...`);
+  const reasoningText = args.reasoningEffort ? `, reasoning=${args.reasoningEffort}` : '';
+  console.error(`[ai-pr-reviewer] Reviewing ${reviewableFiles.length}/${files.length} changed files with ${args.model} (${args.openaiApiMode}${reasoningText}); ignored=${ignoredFiles.length}...`);
   const openai = new OpenAIReviewClient({
     apiKey: args.openaiApiKey,
     baseUrl: args.openaiBaseUrl,
     model: args.model,
     apiMode: args.openaiApiMode,
+    reasoningEffort: args.reasoningEffort,
+    reasoningSummary: args.reasoningSummary,
     timeoutMs: args.openaiTimeoutMs,
     retries: args.openaiRetries,
   });
@@ -108,7 +111,16 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
     requestChangesOn: args.requestChangesOn,
     approveWhenClean: args.approveWhenClean,
   });
-  const body = buildReviewBody({ review, validFindings: freshFindings, skippedFindings: skippedWithDuplicates, commitId, model: args.model, reviewEvent, policyText });
+  const body = buildReviewBody({
+    review,
+    validFindings: freshFindings,
+    skippedFindings: skippedWithDuplicates,
+    commitId,
+    model: args.model,
+    reasoningEffort: args.reasoningEffort,
+    reviewEvent,
+    policyText,
+  });
 
   if (args.dryRun) {
     console.log(JSON.stringify({

@@ -64,6 +64,8 @@ export class OpenAIReviewClient {
     baseUrl = 'https://api.openai.com/v1',
     model = 'gpt-5.5',
     apiMode = 'responses',
+    reasoningEffort = '',
+    reasoningSummary = '',
     timeoutMs = 120_000,
     retries = 2,
   }) {
@@ -72,6 +74,8 @@ export class OpenAIReviewClient {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
     this.apiMode = normalizeApiMode(apiMode);
+    this.reasoningEffort = normalizeReasoningEffort(reasoningEffort);
+    this.reasoningSummary = normalizeReasoningSummary(reasoningSummary);
     this.timeoutMs = timeoutMs;
     this.retries = retries;
   }
@@ -107,6 +111,12 @@ export class OpenAIReviewClient {
       max_output_tokens: 6000,
     };
 
+    const reasoning = buildResponsesReasoningConfig({
+      effort: this.reasoningEffort,
+      summary: this.reasoningSummary,
+    });
+    if (reasoning) payload.reasoning = reasoning;
+
     const response = await this.request('/responses', payload);
     const text = extractResponseText(response);
     if (!text) {
@@ -127,6 +137,10 @@ export class OpenAIReviewClient {
       response_format: { type: 'json_object' },
       temperature: 0,
     };
+
+    if (this.reasoningEffort) {
+      payload.reasoning_effort = this.reasoningEffort;
+    }
 
     const response = await this.request('/chat/completions', payload);
     const text = response?.choices?.[0]?.message?.content || '';
@@ -262,6 +276,26 @@ function normalizeApiMode(value) {
   const mode = String(value || 'responses').trim().toLowerCase();
   if (['chat', 'chat_completions', 'chat-completions'].includes(mode)) return 'chat';
   return 'responses';
+}
+
+function normalizeReasoningEffort(value) {
+  const effort = String(value || '').trim().toLowerCase().replace(/[_-]/g, '');
+  if (!effort || ['off', 'false', 'disabled'].includes(effort)) return '';
+  if (['xhigh', 'xlarge', 'extra'].includes(effort)) return 'xhigh';
+  return effort;
+}
+
+function normalizeReasoningSummary(value) {
+  const summary = String(value || '').trim().toLowerCase();
+  if (!summary || ['none', 'off', 'false', 'disabled'].includes(summary)) return '';
+  return summary;
+}
+
+function buildResponsesReasoningConfig({ effort, summary }) {
+  const reasoning = {};
+  if (effort) reasoning.effort = effort;
+  if (summary) reasoning.summary = summary;
+  return Object.keys(reasoning).length ? reasoning : null;
 }
 
 

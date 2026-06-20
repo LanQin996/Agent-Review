@@ -42,6 +42,8 @@ test('parseArgs supports API mode, retry, ignore, and summary options', () => {
     '--repo', 'owner/name',
     '--pr', '8',
     '--openai-api-mode', 'chat',
+    '--reasoning-effort', 'xhigh',
+    '--reasoning-summary', 'auto',
     '--openai-timeout-ms', '1000',
     '--openai-retries', '0',
     '--github-timeout-ms', '2000',
@@ -51,6 +53,8 @@ test('parseArgs supports API mode, retry, ignore, and summary options', () => {
   ], {});
 
   assert.equal(args.openaiApiMode, 'chat');
+  assert.equal(args.reasoningEffort, 'xhigh');
+  assert.equal(args.reasoningSummary, 'auto');
   assert.equal(args.openaiTimeoutMs, 1000);
   assert.equal(args.openaiRetries, 0);
   assert.equal(args.githubTimeoutMs, 2000);
